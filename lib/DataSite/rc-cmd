@@ -1,0 +1,209 @@
+#!/usr/bin/perl -w
+use strict;
+
+use DataSite::ConfigFile;
+
+my $rcfile;
+my $showonly; 
+
+my @args;
+foreach my $arg ( @ARGV ) {
+
+    exec "pod2text $0" if $arg eq '--help';
+    
+    printf( << "SHORTHELP",
+SYNOPSIS: %s [-h --help -s --before --after] cmd ... [--token STRING] [cmd ...]
+SHORTHELP
+        $0 =~ m{([^/]+)$} ) && exit 0 if ( $arg eq '-h' );
+
+    if ( $arg =~ m/^(-s|--showonly)$/ ) {
+        $showonly = 1;
+        next;
+        }
+
+    if ( $arg =~ m/^--cd=(.*)$/ ) {
+        chdir $1;
+        next;
+        }
+
+    if ( $arg =~ m/^--rc=(.*)$/ ) {
+        $rcfile = $1;
+        next;
+        }
+
+    push @args, $arg;
+    }
+
+unless ( defined $rcfile ) {
+    # parse the as-called name for the rc file name:
+    #     e.g.: ~/bin/foo.rc-cmd -> foo.rc
+    ($rcfile) = $0 =~ m{([^/]+)-cmd(.pl)?$}; 
+    }
+
+# print "DEBUG: look for $rcfile in ", `pwd`;
+
+unless ( -e $rcfile || $rcfile =~ m{/} ) {
+    # look for an rc file:
+    foreach my $f ( $rcfile, ".$rcfile",  "etc/$rcfile" ) {
+      # print "DEBUG: try $f...\n";
+        next unless -e $f;
+        $rcfile = $f;
+        last;
+        }
+    }
+
+die qq(no "$rcfile" file found\n) unless -e $rcfile;
+
+## ASSERT: rc file has been found
+# print "DEBUG: found $rcfile!\n";
+
+my $rc = DataSite::ConfigFile->new($rcfile);
+
+my $after = 0; # default: cmdline options go before rc file options
+my $token = undef;
+
+foreach my $command ( @args ) {
+  # print qq(DEBUG: "$command"\n);
+
+    ## handle options:
+    $after = 0 && next if $command eq '--before';
+    $after = 1 && next if $command eq '--after';
+    $token = $1 && next if $command =~ m/--token=(.*)/;
+    die qq(rc-cmd: unsupported option, "$command"\n) if $command =~ m/^-/;
+
+    my ($cmd, $cmdline_args) = $command =~ m/^([^\s]+)\s*(.*)/;
+
+  # print "DEBUG: $cmd\n";
+
+    my @rc_options;
+    my $options = $rc->get($cmd);
+    foreach my $opt ( @$options ) {
+        my $arg = $rc->get($cmd, $opt);
+        $arg = "'$arg'" if $arg =~ m/\s/;
+        push @rc_options, "--$opt=$arg";
+      # print "DEBUG: --$opt=$arg\n";
+        $ENV{$opt} = $arg;
+        }
+
+    if ( $token && $cmdline_args =~ m/(.*)$token(.*)/ ) { # see: --token 
+        my ($left, $right) = ($1, $2);
+        $left = '' unless defined $left;
+        $right = '' unless defined $right;
+        $cmd = join(' ', $cmd, $left, @rc_options, $right);
+        }
+    elsif ( $after ) { # see: --after
+        $cmd = join(' ', $cmd, @rc_options, $cmdline_args);
+        }
+    else { # see: --before (default)
+        $cmd = join(' ', $cmd, $cmdline_args, @rc_options);
+        }
+
+  # print "DEBUG: system($cmd)\n";
+
+    if ( $showonly ) {
+        print "$cmd\n";
+        }
+    else {
+        system($cmd) == 0
+            or die qq{system($cmd) failed: $?\n};
+        }
+    }
+
+
+=head1 NAME
+
+rc-cmd -- run given command(s) with options set from rc file
+
+=head1 SYNOPSIS
+
+  $ rc-cmd [OPTIONS] command...
+
+=head1 DESCRIPTION
+
+For each argument command, a I<section> of the same name is looked for
+in the rc file, and all entries in that section are formatted as long
+(GNU style) options for the command and the whole command executed.
+
+Options may be specified for a command on the command line by quoting the
+command + options.  Those options will precede the options read from the
+rc file by default (see L<--before>, L<--after>, and L<--token> below).
+
+It is not an error if no section exists for a command in the rc file.
+
+The process will end (die) if any command returns a non-zero exit status.
+
+=head1 OPTIONS
+
+=over
+
+
+=item * -h
+
+one-line synopsis
+
+=item * --help
+
+show manpage
+
+=item * --cd=DIRECTORY
+
+chdir to the specified directory
+
+=item * --rc=RC_FILE
+
+specify the rc file to use. 
+
+If the name includes a slash (C</>) it is taken as an absolute filename;
+otherwise it will be used as the "root name", and various forms of the
+name will be looked for if needed.  See also L<RC FILE NAME> section below.
+
+=item * --before
+
+options or other arguments passed on the command line with a command 
+preceed options read from the rc file.  This is the default.
+
+
+=item * --after
+
+command line options and arguments are placed after rc file options
+
+
+=item * --token=STRING
+
+The token string serves as a marker for where to place the rc file
+options in the resulting command line in relation to options and
+arguments passed on the rc-cmd command line within a command.
+
+
+=item * -s
+
+=item * --showonly
+
+shell commands are printed but not executed
+
+=back
+
+Note: options --before, --after, and --token set the policy for all
+subsequent commands, and may appear multiple times on the rc-cmd
+command line.
+
+
+=head1 RC FILE NAME
+
+By default (if the --rc option is not used) C<rc-cmd> first obtains
+the I<root name> of the rc file from the calling command: everything in
+the filename before "-cmd" is used.  So, for example, "rc" would be the
+root name if called as C<rc-cmd>; "foorc" if called (e.g., via alias or
+symlink) as C<foorc-cmd>; "bar.conf" would derive from C<bar.conf-cmd>;
+etc..
+
+Next, an rc file is looked for with a few permutations: F<rc>, F<.rc>,
+F<etc/rc>.
+
+=head1 BUGS
+
+=head1 AUTHOR
+
+Ken Irving <fnkci@uaf.edu>
+
+=cut
