@@ -1,0 +1,116 @@
+#!/bin/bash
+
+tob=/usr/local/bin/tob
+self=.
+
+error () {
+    echo "$TOB_object.$TOB_method error: $*" >&2
+    exit 1
+    }
+
+# search for properties @tag, @units, @type, use first found:
+unset tag
+unset units
+unset type
+for p in ${TOB_search_paths//:/ }; do
+    test -e $p/@tag && test -z "$tag" && {
+        tag=$(<$p/@tag)
+        tagarr=( $(<$p/@tag) )
+        }
+    test -e $p/@units && test -z "$units" && units=$(<$p/@units)
+    test -e $p/@type && test -z "$type" && type=$(<$p/@type)
+done
+
+unset col
+while test -n "$1"; do
+    case "$1" in
+        --no-header)
+            skip_properties=1
+            ;;
+        --no-hdr)
+            skip_properties=1
+            ;;
+        --col)
+            shift
+            col=( ${col[@]} ${1//,/ } )
+            ;;
+        --column)
+            shift
+            col=( ${col[@]} ${1//,/ } )
+            ;;
+        --tag)
+            shift
+            for s in ${1//,/ }; do
+                i=1
+                for t in $tag; do
+                    test $s == $t && {
+                        col[${#col[@]}]=$i
+                        break
+                        }
+                    i=$(($i+1))
+                    unset t
+                done
+                test -n "$t" ||
+                    error no tag $s
+            done
+          # tagsel=( ${tagsel[@]} ${1//,/ } )
+            ;;
+        *)
+            break
+            ;;
+    esac
+    shift
+done
+
+test -n "$col" && {
+    cols="${col[@]}"
+    cols=(--columns ${cols// /,})
+    }
+
+test -z "$header" && {
+    hdr=(--header "${tagarr[*]}")
+    }
+
+echo $tob $self.super.get "${cols[@]}" "${hdr[@]}" "$@"
+
+$tob $self.super.get "${hdr[@]}" "$@"
+
+# $tob $self.super.get --hdr "$header" "$@"
+
+exit
+
+NAME
+    DataSite/TimeSeries-Data.get -- superclasses TimeSeries.get
+
+SYNOPSIS
+    ob.get [--no-hdr|no-header] [--col|column NUM]] [--tag STRING] ARGS
+
+DESCRIPTION
+    Resolves properties @tag, @units, @type, and uses them to set the
+    --header option to TimeSeries.get.
+
+    Environment variable header will be used in lieu of the above, if set.
+
+OPTIONS
+    These options must precede any options intended for the superclass 
+    TimeSeries.get method.
+
+    --no-hdr
+    --no-header
+    skip resolving @tag and other properties
+
+    --col NUM
+    --column NUM
+    select only identified column(s) for output
+    the first column is number 1
+    NUM can be a number or comma-separated list
+
+    --tag STRING
+    resolve STRING to column number per @tag property
+
+SEE ALSO
+    TimeSeries.get --help
+
+AUTHOR
+    (c) Ken.Irving@alaska.edu 2010
+
