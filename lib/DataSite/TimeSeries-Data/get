@@ -13,22 +13,21 @@ unset tag
 unset units
 unset type
 for p in ${TOB_search_paths//:/ }; do
-    test -e $p/@tag && test -z "$tag" && {
-        tag=$(<$p/@tag)
-        tagarr=( $(<$p/@tag) )
-        }
-    test -e $p/@units && test -z "$units" && units=$(<$p/@units)
-    test -e $p/@type && test -z "$type" && type=$(<$p/@type)
+    test -e $p/@tag && test -z "$tag" && tag=( $(<$p/@tag) )
+    test -e $p/@units && test -z "$units" && units=( $(<$p/@units) )
+    test -e $p/@type && test -z "$type" && type=( $(<$p/@type) )
 done
 
+# col will be the selected columns for output, if set:
 unset col
+unset no_header
 while test -n "$1"; do
     case "$1" in
         --no-header)
-            skip_properties=1
+            no_header=--no-header
             ;;
         --no-hdr)
-            skip_properties=1
+            no_header=--no-header
             ;;
         --col)
             shift
@@ -42,7 +41,7 @@ while test -n "$1"; do
             shift
             for s in ${1//,/ }; do
                 i=1
-                for t in $tag; do
+                for t in "${tag[@]}"; do
                     test $s == $t && {
                         col[${#col[@]}]=$i
                         break
@@ -53,7 +52,6 @@ while test -n "$1"; do
                 test -n "$t" ||
                     error no tag $s
             done
-          # tagsel=( ${tagsel[@]} ${1//,/ } )
             ;;
         *)
             break
@@ -62,20 +60,23 @@ while test -n "$1"; do
     shift
 done
 
-test -n "$col" && {
+if test -n "$col"; then
     cols="${col[@]}"
     cols=(--columns ${cols// /,})
-    }
+    for n in "${col[@]}"; do
+        test -n "${tag[$n-1]}" || error no tag for column $n
+        hdr[${#hdr[@]}]=${tag[$n-1]}  
+    done
+    hdr=(--header "${hdr[*]}")
+fi
 
-test -z "$header" && {
-    hdr=(--header "${tagarr[*]}")
+test -z "$hdr" && {
+    hdr=(--header "${tag[*]}")
     }
 
 echo $tob $self.super.get "${cols[@]}" "${hdr[@]}" "$@"
 
-$tob $self.super.get "${hdr[@]}" "$@"
-
-# $tob $self.super.get --hdr "$header" "$@"
+$tob $self.super.get "${hdr[@]}" $no_header "$@"
 
 exit
 
@@ -97,7 +98,7 @@ OPTIONS
 
     --no-hdr
     --no-header
-    skip resolving @tag and other properties
+    suppress header output
 
     --col NUM
     --column NUM
@@ -107,6 +108,7 @@ OPTIONS
 
     --tag STRING
     resolve STRING to column number per @tag property
+    STRING can be a single tagname or a comma-separated list
 
 SEE ALSO
     TimeSeries.get --help
