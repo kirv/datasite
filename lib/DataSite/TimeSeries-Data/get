@@ -62,7 +62,7 @@ done
 
 if test -n "$col"; then
     cols="${col[@]}"
-    cols=(--columns ${cols// /,})
+    cols=(--column ${cols// /,})
     for n in "${col[@]}"; do
         test -n "${tag[$n-1]}" || error no tag for column $n
         hdr[${#hdr[@]}]=${tag[$n-1]}  
@@ -70,13 +70,11 @@ if test -n "$col"; then
     hdr=(--header "${hdr[*]}")
 fi
 
-test -z "$hdr" && {
-    hdr=(--header "${tag[*]}")
-    }
+test -z "$hdr" &&
+    test -n "$tag" &&
+        hdr=(--header "${tag[*]}")
 
-echo $tob $self.super.get "${cols[@]}" "${hdr[@]}" "$@"
-
-$tob $self.super.get "${hdr[@]}" $no_header "$@"
+$tob $self.get-split "${cols[@]}" "${hdr[@]}" $no_header "$@"
 
 exit
 
@@ -111,7 +109,7 @@ OPTIONS
     STRING can be a single tagname or a comma-separated list
 
 SEE ALSO
-    TimeSeries.get --help
+    TimeSeries.get-split --help
 
 AUTHOR
     (c) Ken.Irving@alaska.edu 2010
